@@ -4,6 +4,7 @@
     <application
         android:allowBackup="true"
         android:label="Doodle Jump"
+        android:icon="@drawable/icon"
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.NoActionBar">
         <activity

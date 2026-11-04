@@ -129,6 +129,8 @@
             score = 0; maxHeight = 0; isDead = false; rocketTime = 0;
             currentBgIndex = 0; nextBgIndex = 0;
             player = { x: 200, y: 400, w: 40, h: 60, vy: 0, vx: 0 };
+            keys['ArrowLeft'] = false;
+            keys['ArrowRight'] = false;
             
             function spawnPlatform(y) {
                 return {
@@ -259,31 +261,48 @@
             gameLoopId = requestAnimationFrame(loop);
         }
 
-        window.addEventListener('keydown', e => { 
-            if(keys && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) keys[e.code] = true;
-        });
-        window.addEventListener('keyup', e => { 
-            if(keys && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) keys[e.code] = false;
-        });
-
-        cvs.addEventListener('touchstart', e => {
+        function handleTouch(e) {
             if (document.getElementById('menu').style.display !== 'none') return;
+            
             if (isDead) { restart(); return; }
-            let touchX = e.touches[0].clientX;
-            let rect = cvs.getBoundingClientRect();
-            if (touchX - rect.left < rect.width / 2) keys['ArrowLeft'] = true;
-            else keys['ArrowRight'] = true;
-        }, {passive: true});
-        
-        cvs.addEventListener('touchend', () => { 
-            if(keys) { keys['ArrowLeft'] = false; keys['ArrowRight'] = false; }
-        }, {passive: true});
+            
+            if (e.touches && e.touches.length > 0) {
+                let touchX = e.touches[0].clientX;
+                let rect = cvs.getBoundingClientRect();
+                let canvasX = touchX - rect.left;
+                
+                if (canvasX < rect.width / 2) keys['ArrowLeft'] = true;
+                else keys['ArrowRight'] = true;
+            }
+        }
 
-        cvs.addEventListener('click', () => { if (isDead) restart(); });
+        function handleTouchEnd() {
+            keys['ArrowLeft'] = false;
+            keys['ArrowRight'] = false;
+        }
+
+        cvs.addEventListener('touchstart', handleTouch, {passive: true});
+        cvs.addEventListener('touchend', handleTouchEnd, {passive: true});
+        cvs.addEventListener('mousedown', handleTouch);
+        cvs.addEventListener('mouseup', handleTouchEnd);
+
+        document.addEventListener('keydown', e => { 
+            if(e.code === 'ArrowLeft') keys['ArrowLeft'] = true;
+            if(e.code === 'ArrowRight') keys['ArrowRight'] = true;
+        });
+        document.addEventListener('keyup', e => { 
+            if(e.code === 'ArrowLeft') keys['ArrowLeft'] = false;
+            if(e.code === 'ArrowRight') keys['ArrowRight'] = false;
+        });
+
+        document.addEventListener('click', () => { 
+            if (isDead) restart(); 
+        });
 
         function restart() {
             document.getElementById('menu').style.display = 'flex';
             if (gameLoopId) cancelAnimationFrame(gameLoopId);
+            isDead = false;
         }
 
         init();

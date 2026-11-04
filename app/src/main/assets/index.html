@@ -13,24 +13,18 @@
         }
         
         #game-container {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: #000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%; background: #000;
+            display: flex; align-items: center; justify-content: center;
         }
         canvas { width: 100%; height: 100%; max-width: 450px; max-height: 800px; display: block; }
 
         #menu {
-            position: absolute;
-            top: 0; left: 0;
+            position: absolute; top: 0; left: 0;
             width: 100%; height: 100%;
             background: url('./menu-bg.png') center / cover no-repeat;
             display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
-            padding-bottom: 15%;
-            z-index: 10;
+            padding-bottom: 15%; z-index: 10;
         }
         .skins { display: flex; gap: 15px; margin-bottom: 20px; }
         .skin {
@@ -61,10 +55,11 @@
     </div>
 
     <script>
+        const cvs = document.getElementById('game');
+        const ctx = cvs.getContext('2d');
+        const menu = document.getElementById('menu');
+
         let chosenSkin = 1;
-        let cvs = document.getElementById('game');
-        let ctx = cvs.getContext('2d');
-        
         let platforms = [], score = 0, maxHeight = 0, isDead = false, rocketTime = 0;
         let currentBgIndex = 0, nextBgIndex = 0;
         let player = { x: 200, y: 400, w: 40, h: 60, vy: 0, vx: 0 };
@@ -101,16 +96,6 @@
 
         async function init() {
             await loadImages(chosenSkin);
-            
-            function spawnPlatform(y) {
-                return {
-                    x: 30 + Math.random() * 330, y: y,
-                    color: Math.random() > 0.5 ? 'green' : 'blue',
-                    item: Math.random() < 0.2 ? (Math.random() < 0.1 ? 'monster' : 'coin') : null
-                };
-            }
-
-            for (let y = 750; y > 0; y -= 80) platforms.push(spawnPlatform(y));
             gameReady = true;
             loop();
         }
@@ -123,15 +108,21 @@
 
         function startGame() {
             if (!gameReady) return;
-            document.getElementById('menu').style.display = 'none';
             
-            platforms = [];
-            score = 0; maxHeight = 0; isDead = false; rocketTime = 0;
-            currentBgIndex = 0; nextBgIndex = 0;
+            menu.style.display = 'none';
+            
+            score = 0; 
+            maxHeight = 0; 
+            isDead = false; 
+            rocketTime = 0;
+            currentBgIndex = 0; 
+            nextBgIndex = 0;
+            
             player = { x: 200, y: 400, w: 40, h: 60, vy: 0, vx: 0 };
             keys['ArrowLeft'] = false;
             keys['ArrowRight'] = false;
-            
+            platforms = [];
+
             function spawnPlatform(y) {
                 return {
                     x: 30 + Math.random() * 330, y: y,
@@ -139,6 +130,7 @@
                     item: Math.random() < 0.2 ? (Math.random() < 0.1 ? 'monster' : 'coin') : null
                 };
             }
+
             for (let y = 750; y > 0; y -= 80) platforms.push(spawnPlatform(y));
             
             imgs.player.src = './doodle' + chosenSkin + '.png';
@@ -254,55 +246,54 @@
         }
 
         function loop() {
-            if (!isDead && document.getElementById('menu').style.display === 'none') {
+            if (!isDead && menu.style.display === 'none') {
                 update();
             }
             draw();
             gameLoopId = requestAnimationFrame(loop);
         }
 
-        function handleTouch(e) {
-            if (document.getElementById('menu').style.display !== 'none') return;
-            
+        function handlePress(e) {
+            if (menu.style.display !== 'none') return;
             if (isDead) { restart(); return; }
             
-            if (e.touches && e.touches.length > 0) {
-                let touchX = e.touches[0].clientX;
-                let rect = cvs.getBoundingClientRect();
-                let canvasX = touchX - rect.left;
-                
-                if (canvasX < rect.width / 2) keys['ArrowLeft'] = true;
-                else keys['ArrowRight'] = true;
-            }
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let rect = cvs.getBoundingClientRect();
+            let scaleX = 450 / rect.width;
+            let canvasX = (clientX - rect.left) * scaleX;
+            
+            if (canvasX < 225) keys['ArrowLeft'] = true;
+            else keys['ArrowRight'] = true;
         }
 
-        function handleTouchEnd() {
+        function handleRelease() {
             keys['ArrowLeft'] = false;
             keys['ArrowRight'] = false;
         }
 
-        cvs.addEventListener('touchstart', handleTouch, {passive: true});
-        cvs.addEventListener('touchend', handleTouchEnd, {passive: true});
-        cvs.addEventListener('mousedown', handleTouch);
-        cvs.addEventListener('mouseup', handleTouchEnd);
+        cvs.addEventListener('touchstart', handlePress, {passive: true});
+        cvs.addEventListener('touchend', handleRelease, {passive: true});
+        cvs.addEventListener('mousedown', handlePress);
+        cvs.addEventListener('mouseup', handleRelease);
 
-        document.addEventListener('keydown', e => { 
+        window.addEventListener('keydown', e => { 
             if(e.code === 'ArrowLeft') keys['ArrowLeft'] = true;
             if(e.code === 'ArrowRight') keys['ArrowRight'] = true;
         });
-        document.addEventListener('keyup', e => { 
+        window.addEventListener('keyup', e => { 
             if(e.code === 'ArrowLeft') keys['ArrowLeft'] = false;
             if(e.code === 'ArrowRight') keys['ArrowRight'] = false;
         });
 
-        document.addEventListener('click', () => { 
-            if (isDead) restart(); 
+        document.addEventListener('click', (e) => { 
+            if (isDead && menu.style.display === 'none') restart(); 
         });
 
         function restart() {
-            document.getElementById('menu').style.display = 'flex';
-            if (gameLoopId) cancelAnimationFrame(gameLoopId);
+            menu.style.display = 'flex';
             isDead = false;
+            keys['ArrowLeft'] = false;
+            keys['ArrowRight'] = false;
         }
 
         init();

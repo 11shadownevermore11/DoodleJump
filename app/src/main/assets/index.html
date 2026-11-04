@@ -7,25 +7,30 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
         html, body {
-            height: 100%;
-            width: 100%;
-            background: #222;
+            height: 100%; width: 100%; background: #222;
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden; font-family: sans-serif;
+        }
+        
+        #game-container {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: #000;
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow: hidden;
-            font-family: sans-serif;
         }
-        
+        canvas { width: 100%; height: 100%; max-width: 450px; max-height: 800px; display: block; }
+
         #menu {
-            width: 100%;
-            height: 100%;
-            background: url('menu-bg.png') center / cover no-repeat;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-end;
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: url('./menu-bg.png') center / cover no-repeat;
+            display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
             padding-bottom: 15%;
+            z-index: 10;
         }
         .skins { display: flex; gap: 15px; margin-bottom: 20px; }
         .skin {
@@ -38,38 +43,77 @@
             padding: 15px 40px; font-size: 20px; font-weight: bold;
             border: 3px solid black; border-radius: 8px; cursor: pointer; background: white;
         }
-
-        #game-container {
-            display: none;
-            width: 100%;
-            height: 100%;
-            background: #eee;
-        }
-        canvas { width: 100%; height: 100%; display: block; }
     </style>
 </head>
 <body>
-
-    <div id="menu">
-        <div class="skins">
-            <div class="skin active" onclick="selectSkin(1, this)"><img src="doodle1.png"></div>
-            <div class="skin" onclick="selectSkin(2, this)"><img src="doodle2.png"></div>
-            <div class="skin" onclick="selectSkin(3, this)"><img src="doodle3.png"></div>
-        </div>
-        <button class="btn" onclick="startGame()">Начать игру</button>
-    </div>
 
     <div id="game-container">
         <canvas id="game" width="450" height="800"></canvas>
     </div>
 
+    <div id="menu">
+        <div class="skins">
+            <div class="skin active" onclick="selectSkin(1, this)"><img src="./doodle1.png"></div>
+            <div class="skin" onclick="selectSkin(2, this)"><img src="./doodle2.png"></div>
+            <div class="skin" onclick="selectSkin(3, this)"><img src="./doodle3.png"></div>
+        </div>
+        <button class="btn" onclick="startGame()">Начать игру</button>
+    </div>
+
     <script>
         let chosenSkin = 1;
-        let cvs, ctx;
-        let platforms, score, maxHeight, isDead, rocketTime, player, keys, currentBgIndex, nextBgIndex;
-        let gameLoopId;
-
+        let cvs = document.getElementById('game');
+        let ctx = cvs.getContext('2d');
+        
+        let platforms = [], score = 0, maxHeight = 0, isDead = false, rocketTime = 0;
+        let currentBgIndex = 0, nextBgIndex = 0;
+        let player = { x: 200, y: 400, w: 40, h: 60, vy: 0, vx: 0 };
+        let keys = { ArrowLeft: false, ArrowRight: false };
+        
         const imgs = {};
+        let gameLoopId = null;
+        let gameReady = false;
+
+        function loadImages(skinId) {
+            return new Promise((resolve) => {
+                let loaded = 0;
+                const srcs = {
+                    player: './doodle' + skinId + '.png',
+                    rocket: './rocket_doodle.png',
+                    monster: './monster.png',
+                    coin: './coin.png',
+                    platGreen: './platform_green.png',
+                    platBlue: './platform_blue.png',
+                    bg1: './bg1.png', bg2: './bg2.png', bg3: './bg3.png', bg4: './bg4.png', bg5: './bg5.png'
+                };
+                const total = Object.keys(srcs).length;
+                
+                for (let key in srcs) {
+                    imgs[key] = new Image();
+                    imgs[key].onload = imgs[key].onerror = () => {
+                        loaded++;
+                        if (loaded === total) resolve();
+                    };
+                    imgs[key].src = srcs[key];
+                }
+            });
+        }
+
+        async function init() {
+            await loadImages(chosenSkin);
+            
+            function spawnPlatform(y) {
+                return {
+                    x: 30 + Math.random() * 330, y: y,
+                    color: Math.random() > 0.5 ? 'green' : 'blue',
+                    item: Math.random() < 0.2 ? (Math.random() < 0.1 ? 'monster' : 'coin') : null
+                };
+            }
+
+            for (let y = 750; y > 0; y -= 80) platforms.push(spawnPlatform(y));
+            gameReady = true;
+            loop();
+        }
 
         function selectSkin(num, el) {
             chosenSkin = num;
@@ -78,80 +122,31 @@
         }
 
         function startGame() {
+            if (!gameReady) return;
             document.getElementById('menu').style.display = 'none';
-            document.getElementById('game-container').style.display = 'block';
-            initGame(chosenSkin);
-        }
-
-        function loadImages(skinId) {
-            return new Promise((resolve) => {
-                let loadedCount = 0;
-                const sources = {
-                    player: 'doodle' + skinId + '.png',
-                    rocket: 'rocket_doodle.png',
-                    monster: 'monster.png',
-                    coin: 'coin.png',
-                    platGreen: 'platform_green.png',
-                    platBlue: 'platform_blue.png',
-                    bg1: 'bg1.png', bg2: 'bg2.png', bg3: 'bg3.png', bg4: 'bg4.png', bg5: 'bg5.png'
-                };
-                
-                const total = Object.keys(sources).length;
-                for (let key in sources) {
-                    imgs[key] = new Image();
-                    imgs[key].onload = () => {
-                        loadedCount++;
-                        if (loadedCount === total) resolve();
-                    };
-                    imgs[key].onerror = () => {
-                        loadedCount++;
-                        if (loadedCount === total) resolve();
-                    };
-                    imgs[key].src = sources[key];
-                }
-            });
-        }
-
-        async function initGame(skinId) {
-            cvs = document.getElementById('game');
-            ctx = cvs.getContext('2d');
             
-            await loadImages(skinId);
-
             platforms = [];
-            score = 0;
-            maxHeight = 0;
-            isDead = false;
-            rocketTime = 0;
-            currentBgIndex = 0;
-            nextBgIndex = 0;
+            score = 0; maxHeight = 0; isDead = false; rocketTime = 0;
+            currentBgIndex = 0; nextBgIndex = 0;
             player = { x: 200, y: 400, w: 40, h: 60, vy: 0, vx: 0 };
-            keys = { ArrowLeft: false, ArrowRight: false };
-
+            
             function spawnPlatform(y) {
                 return {
-                    x: 30 + Math.random() * 330,
-                    y: y,
+                    x: 30 + Math.random() * 330, y: y,
                     color: Math.random() > 0.5 ? 'green' : 'blue',
                     item: Math.random() < 0.2 ? (Math.random() < 0.1 ? 'monster' : 'coin') : null
                 };
             }
-
             for (let y = 750; y > 0; y -= 80) platforms.push(spawnPlatform(y));
-
-            if (gameLoopId) cancelAnimationFrame(gameLoopId);
-            loop();
+            
+            imgs.player.src = './doodle' + chosenSkin + '.png';
         }
 
         function update() {
             if (isDead) return;
 
-            if (rocketTime > 0) {
-                player.vy = -18;
-                rocketTime--;
-            } else {
-                player.vy += 0.4;
-            }
+            if (rocketTime > 0) { player.vy = -18; rocketTime--; }
+            else { player.vy += 0.4; }
 
             player.y += player.vy;
             player.x += player.vx;
@@ -186,7 +181,12 @@
             });
 
             if (platforms[platforms.length - 1].y > 0) {
-                platforms.push(spawnPlatform(platforms[platforms.length - 1].y - 80));
+                platforms.push({
+                    x: 30 + Math.random() * 330,
+                    y: platforms[platforms.length - 1].y - 80,
+                    color: Math.random() > 0.5 ? 'green' : 'blue',
+                    item: Math.random() < 0.2 ? (Math.random() < 0.1 ? 'monster' : 'coin') : null
+                });
             }
             platforms = platforms.filter(p => p.y < 850);
 
@@ -202,7 +202,6 @@
 
             let bgProgress = maxHeight / 3000;
             let alpha = bgProgress - Math.floor(bgProgress);
-
             let bgArr = [imgs.bg1, imgs.bg2, imgs.bg3, imgs.bg4, imgs.bg5];
 
             if (bgArr[currentBgIndex] && bgArr[currentBgIndex].complete) {
@@ -253,7 +252,9 @@
         }
 
         function loop() {
-            if (!isDead) update();
+            if (!isDead && document.getElementById('menu').style.display === 'none') {
+                update();
+            }
             draw();
             gameLoopId = requestAnimationFrame(loop);
         }
@@ -265,26 +266,27 @@
             if(keys && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) keys[e.code] = false;
         });
 
-        document.getElementById('game').addEventListener('touchstart', e => {
+        cvs.addEventListener('touchstart', e => {
+            if (document.getElementById('menu').style.display !== 'none') return;
             if (isDead) { restart(); return; }
-            if (!keys) return;
             let touchX = e.touches[0].clientX;
             let rect = cvs.getBoundingClientRect();
             if (touchX - rect.left < rect.width / 2) keys['ArrowLeft'] = true;
             else keys['ArrowRight'] = true;
         }, {passive: true});
         
-        document.getElementById('game').addEventListener('touchend', () => { 
+        cvs.addEventListener('touchend', () => { 
             if(keys) { keys['ArrowLeft'] = false; keys['ArrowRight'] = false; }
         }, {passive: true});
 
-        document.getElementById('game').addEventListener('click', () => { if (isDead) restart(); });
+        cvs.addEventListener('click', () => { if (isDead) restart(); });
 
         function restart() {
             document.getElementById('menu').style.display = 'flex';
-            document.getElementById('game-container').style.display = 'none';
             if (gameLoopId) cancelAnimationFrame(gameLoopId);
         }
+
+        init();
     </script>
 </body>
 </html>

@@ -18,19 +18,16 @@
         }
         
         #menu {
-            width: 450px;
-            height: 800px;
-            max-width: 100vw;
-            max-height: 100vh;
-            background: url('menu-bg.png') center / contain no-repeat;
-            border: 2px solid white;
+            width: 100%;
+            height: 100%;
+            background: url('menu-bg.png') center / cover no-repeat;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: flex-end;
-            padding-bottom: 240px;
+            padding-bottom: 15%;
         }
-        .skins { display: flex; gap: 15px; margin-bottom: 15px; }
+        .skins { display: flex; gap: 15px; margin-bottom: 20px; }
         .skin {
             width: 60px; height: 60px; border: 3px solid #ccc; border-radius: 8px;
             background: white; cursor: pointer; overflow: hidden;
@@ -38,18 +35,17 @@
         .skin.active { border-color: green; }
         .skin img { width: 100%; height: 100%; object-fit: contain; }
         .btn {
-            padding: 12px 32px; font-size: 18px; font-weight: bold;
+            padding: 15px 40px; font-size: 20px; font-weight: bold;
             border: 3px solid black; border-radius: 8px; cursor: pointer; background: white;
         }
 
         #game-container {
             display: none;
-            width: 450px;
-            height: 800px;
-            max-width: 100vw;
-            max-height: 100vh;
+            width: 100%;
+            height: 100%;
+            background: #eee;
         }
-        canvas { width: 100%; height: 100%; border: 2px solid white; background: #eee; }
+        canvas { width: 100%; height: 100%; display: block; }
     </style>
 </head>
 <body>
@@ -69,6 +65,11 @@
 
     <script>
         let chosenSkin = 1;
+        let cvs, ctx;
+        let platforms, score, maxHeight, isDead, rocketTime, player, keys, currentBgIndex, nextBgIndex;
+        let gameLoopId;
+
+        const imgs = {};
 
         function selectSkin(num, el) {
             chosenSkin = num;
@@ -82,24 +83,40 @@
             initGame(chosenSkin);
         }
 
-        let cvs, ctx, imgPlayer, imgRocket, imgMonster, imgCoin, imgPlatGreen, imgPlatBlue, bgs;
-        let platforms, score, maxHeight, isDead, rocketTime, player, keys, currentBgIndex, nextBgIndex;
-        let gameLoopId;
+        function loadImages(skinId) {
+            return new Promise((resolve) => {
+                let loadedCount = 0;
+                const sources = {
+                    player: 'doodle' + skinId + '.png',
+                    rocket: 'rocket_doodle.png',
+                    monster: 'monster.png',
+                    coin: 'coin.png',
+                    platGreen: 'platform_green.png',
+                    platBlue: 'platform_blue.png',
+                    bg1: 'bg1.png', bg2: 'bg2.png', bg3: 'bg3.png', bg4: 'bg4.png', bg5: 'bg5.png'
+                };
+                
+                const total = Object.keys(sources).length;
+                for (let key in sources) {
+                    imgs[key] = new Image();
+                    imgs[key].onload = () => {
+                        loadedCount++;
+                        if (loadedCount === total) resolve();
+                    };
+                    imgs[key].onerror = () => {
+                        loadedCount++;
+                        if (loadedCount === total) resolve();
+                    };
+                    imgs[key].src = sources[key];
+                }
+            });
+        }
 
-        function initGame(skinId) {
+        async function initGame(skinId) {
             cvs = document.getElementById('game');
             ctx = cvs.getContext('2d');
             
-            imgPlayer = new Image(); imgPlayer.src = 'doodle' + skinId + '.png';
-            imgRocket = new Image(); imgRocket.src = 'rocket_doodle.png';
-            imgMonster = new Image(); imgMonster.src = 'monster.png';
-            imgCoin = new Image(); imgCoin.src = 'coin.png';
-            imgPlatGreen = new Image(); imgPlatGreen.src = 'platform_green.png';
-            imgPlatBlue = new Image(); imgPlatBlue.src = 'platform_blue.png';
-
-            bgs = ['bg1.png', 'bg2.png', 'bg3.png', 'bg4.png', 'bg5.png'].map(src => {
-                let i = new Image(); i.src = src; return i;
-            });
+            await loadImages(skinId);
 
             platforms = [];
             score = 0;
@@ -176,8 +193,8 @@
             if (score >= 100) isDead = true;
 
             let bgProgress = maxHeight / 3000;
-            currentBgIndex = Math.floor(bgProgress) % bgs.length;
-            nextBgIndex = (currentBgIndex + 1) % bgs.length;
+            currentBgIndex = Math.floor(bgProgress) % 5;
+            nextBgIndex = (currentBgIndex + 1) % 5;
         }
 
         function draw() {
@@ -186,31 +203,33 @@
             let bgProgress = maxHeight / 3000;
             let alpha = bgProgress - Math.floor(bgProgress);
 
-            if (bgs[currentBgIndex] && bgs[currentBgIndex].complete) {
-                ctx.drawImage(bgs[currentBgIndex], 0, 0, 450, 800);
+            let bgArr = [imgs.bg1, imgs.bg2, imgs.bg3, imgs.bg4, imgs.bg5];
+
+            if (bgArr[currentBgIndex] && bgArr[currentBgIndex].complete) {
+                ctx.drawImage(bgArr[currentBgIndex], 0, 0, 450, 800);
             } else {
                 ctx.fillStyle = '#87CEEB'; ctx.fillRect(0, 0, 450, 800);
             }
 
-            if (alpha > 0 && bgs[nextBgIndex] && bgs[nextBgIndex].complete) {
+            if (alpha > 0 && bgArr[nextBgIndex] && bgArr[nextBgIndex].complete) {
                 ctx.globalAlpha = alpha;
-                ctx.drawImage(bgs[nextBgIndex], 0, 0, 450, 800);
+                ctx.drawImage(bgArr[nextBgIndex], 0, 0, 450, 800);
                 ctx.globalAlpha = 1;
             }
 
             platforms.forEach(p => {
-                let img = p.color === 'green' ? imgPlatGreen : imgPlatBlue;
-                if (img.complete) ctx.drawImage(img, p.x, p.y, 65, 20);
+                let img = p.color === 'green' ? imgs.platGreen : imgs.platBlue;
+                if (img && img.complete) ctx.drawImage(img, p.x, p.y, 65, 20);
                 else { ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 65, 20); }
 
-                if (p.item === 'coin' && imgCoin.complete) ctx.drawImage(imgCoin, p.x + 20, p.y - 30, 25, 25);
-                if (p.item === 'monster' && imgMonster.complete) ctx.drawImage(imgMonster, p.x + 10, p.y - 40, 45, 45);
+                if (p.item === 'coin' && imgs.coin.complete) ctx.drawImage(imgs.coin, p.x + 20, p.y - 30, 25, 25);
+                if (p.item === 'monster' && imgs.monster.complete) ctx.drawImage(imgs.monster, p.x + 10, p.y - 40, 45, 45);
             });
 
-            if (rocketTime > 0 && imgRocket.complete) {
-                ctx.drawImage(imgRocket, player.x - 10, player.y - 10, 60, 80);
-            } else if (imgPlayer.complete) {
-                ctx.drawImage(imgPlayer, player.x, player.y, 40, 60);
+            if (rocketTime > 0 && imgs.rocket.complete) {
+                ctx.drawImage(imgs.rocket, player.x - 10, player.y - 10, 60, 80);
+            } else if (imgs.player.complete) {
+                ctx.drawImage(imgs.player, player.x, player.y, 40, 60);
             } else {
                 ctx.fillStyle = 'yellow'; ctx.fillRect(player.x, player.y, 40, 60);
             }
@@ -228,7 +247,8 @@
                 ctx.fillText('Конец игры', 225, 350);
                 ctx.font = '24px Arial';
                 ctx.fillText('Счет: ' + score, 225, 400);
-                ctx.fillText('Нажми, чтобы выйти в меню', 225, 450);
+                ctx.fillText('Коснись экрана', 225, 450);
+                ctx.textAlign = 'left';
             }
         }
 
@@ -238,35 +258,27 @@
             gameLoopId = requestAnimationFrame(loop);
         }
 
-        // Управление с клавиатуры
         window.addEventListener('keydown', e => { 
-            if(keys && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
-                keys[e.code] = true;
-            }
+            if(keys && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) keys[e.code] = true;
         });
         window.addEventListener('keyup', e => { 
-            if(keys && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
-                keys[e.code] = false;
-            }
+            if(keys && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) keys[e.code] = false;
         });
 
-        // Управление тапами для телефона
-        cvs.addEventListener('touchstart', e => {
+        document.getElementById('game').addEventListener('touchstart', e => {
             if (isDead) { restart(); return; }
+            if (!keys) return;
             let touchX = e.touches[0].clientX;
             let rect = cvs.getBoundingClientRect();
             if (touchX - rect.left < rect.width / 2) keys['ArrowLeft'] = true;
             else keys['ArrowRight'] = true;
-        });
+        }, {passive: true});
         
-        cvs.addEventListener('touchend', () => { 
-            if(keys) {
-                keys['ArrowLeft'] = false; 
-                keys['ArrowRight'] = false; 
-            }
-        });
+        document.getElementById('game').addEventListener('touchend', () => { 
+            if(keys) { keys['ArrowLeft'] = false; keys['ArrowRight'] = false; }
+        }, {passive: true});
 
-        cvs.addEventListener('click', () => { if (isDead) restart(); });
+        document.getElementById('game').addEventListener('click', () => { if (isDead) restart(); });
 
         function restart() {
             document.getElementById('menu').style.display = 'flex';

@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Doodle Jump</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
+        html, body {
+            height: 100%;
+            width: 100%;
+            background: #222;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
+        
+        #menu {
+            width: 450px;
+            height: 800px;
+            max-width: 100vw;
+            max-height: 100vh;
+            background: url('menu-bg.png') center / contain no-repeat;
+            border: 2px solid white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            padding-bottom: 240px;
+        }
+        .skins { display: flex; gap: 15px; margin-bottom: 15px; }
+        .skin {
+            width: 60px; height: 60px; border: 3px solid #ccc; border-radius: 8px;
+            background: white; cursor: pointer; overflow: hidden;
+        }
+        .skin.active { border-color: green; }
+        .skin img { width: 100%; height: 100%; object-fit: contain; }
+        .btn {
+            padding: 12px 32px; font-size: 18px; font-weight: bold;
+            border: 3px solid black; border-radius: 8px; cursor: pointer; background: white;
+        }
+
+        #game-container {
+            display: none;
+            width: 450px;
+            height: 800px;
+            max-width: 100vw;
+            max-height: 100vh;
+        }
+        canvas { width: 100%; height: 100%; border: 2px solid white; background: #eee; }
+    </style>
+</head>
+<body>
+
+    <div id="menu">
+        <div class="skins">
+            <div class="skin active" onclick="selectSkin(1, this)"><img src="doodle1.png"></div>
+            <div class="skin" onclick="selectSkin(2, this)"><img src="doodle2.png"></div>
+            <div class="skin" onclick="selectSkin(3, this)"><img src="doodle3.png"></div>
+        </div>
+        <button class="btn" onclick="startGame()">Начать игру</button>
+    </div>
+
+    <div id="game-container">
+        <canvas id="game" width="450" height="800"></canvas>
+    </div>
+
+    <script>
+        let chosenSkin = 1;
+
+        function selectSkin(num, el) {
+            chosenSkin = num;
+            document.querySelectorAll('.skin').forEach(s => s.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        function startGame() {
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById('game-container').style.display = 'block';
+            initGame(chosenSkin);
+        }
+
+        let cvs, ctx, imgPlayer, imgRocket, imgMonster, imgCoin, imgPlatGreen, imgPlatBlue, bgs;
+        let platforms, score, maxHeight, isDead, rocketTime, player, keys, currentBgIndex, nextBgIndex;
+        let gameLoopId;
+
+        function initGame(skinId) {
+            cvs = document.getElementById('game');
+            ctx = cvs.getContext('2d');
+            
+            imgPlayer = new Image(); imgPlayer.src = 'doodle' + skinId + '.png';
+            imgRocket = new Image(); imgRocket.src = 'rocket_doodle.png';
+            imgMonster = new Image(); imgMonster.src = 'monster.png';
+            imgCoin = new Image(); imgCoin.src = 'coin.png';
+            imgPlatGreen = new Image(); imgPlatGreen.src = 'platform_green.png';
+            imgPlatBlue = new Image(); imgPlatBlue.src = 'platform_blue.png';
+
+            bgs = ['bg1.png', 'bg2.png', 'bg3.png', 'bg4.png', 'bg5.png'].map(src => {
+                let i = new Image(); i.src = src; return i;
+            });
+
+            platforms = [];
+            score = 0;
+            maxHeight = 0;
+            isDead = false;
+            rocketTime = 0;
+            currentBgIndex = 0;
+            nextBgIndex = 0;
+            player = { x: 200, y: 400, w: 40, h: 60, vy: 0, vx: 0 };
+            keys = { ArrowLeft: false, ArrowRight: false };
+
+            function spawnPlatform(y) {
+                return {
+                    x: 30 + Math.random() * 330,
+                    y: y,
+                    color: Math.random() > 0.5 ? 'green' : 'blue',
+                    item: Math.random() < 0.2 ? (Math.random() < 0.1 ? 'monster' : 'coin') : null
+                };
+            }
+
+            for (let y = 750; y > 0; y -= 80) platforms.push(spawnPlatform(y));
+
+            if (gameLoopId) cancelAnimationFrame(gameLoopId);
+            loop();
+        }
+
+        function update() {
+            if (isDead) return;
+
+            if (rocketTime > 0) {
+                player.vy = -18;
+                rocketTime--;
+            } else {
+                player.vy += 0.4;
+            }
+
+            player.y += player.vy;
+            player.x += player.vx;
+
+            if (player.x < -40) player.x = 450;
+            if (player.x > 450) player.x = -40;
+
+            if (keys['ArrowLeft']) player.vx = -5;
+            else if (keys['ArrowRight']) player.vx = 5;
+            else player.vx *= 0.8;
+
+            if (player.vy < 0 && player.y < 400) {
+                let diff = -player.vy;
+                player.y += diff;
+                maxHeight += diff;
+                platforms.forEach(p => p.y += diff);
+            }
+
+            if (player.y > 800) isDead = true;
+
+            platforms.forEach(p => {
+                if (player.vy > 0 && player.y + player.h > p.y && player.y + player.h < p.y + 30 &&
+                    player.x + player.w > p.x && player.x < p.x + 65) {
+                    
+                    player.vy = -12;
+                    player.y = p.y - player.h;
+
+                    if (p.item === 'coin') { score++; p.item = null; }
+                    if (p.item === 'monster') { score -= 5; p.item = null; }
+                    if (Math.random() < 0.03) { rocketTime = 150; }
+                }
+            });
+
+            if (platforms[platforms.length - 1].y > 0) {
+                platforms.push(spawnPlatform(platforms[platforms.length - 1].y - 80));
+            }
+            platforms = platforms.filter(p => p.y < 850);
+
+            if (score >= 100) isDead = true;
+
+            let bgProgress = maxHeight / 3000;
+            currentBgIndex = Math.floor(bgProgress) % bgs.length;
+            nextBgIndex = (currentBgIndex + 1) % bgs.length;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, 450, 800);
+
+            let bgProgress = maxHeight / 3000;
+            let alpha = bgProgress - Math.floor(bgProgress);
+
+            if (bgs[currentBgIndex] && bgs[currentBgIndex].complete) {
+                ctx.drawImage(bgs[currentBgIndex], 0, 0, 450, 800);
+            } else {
+                ctx.fillStyle = '#87CEEB'; ctx.fillRect(0, 0, 450, 800);
+            }
+
+            if (alpha > 0 && bgs[nextBgIndex] && bgs[nextBgIndex].complete) {
+                ctx.globalAlpha = alpha;
+                ctx.drawImage(bgs[nextBgIndex], 0, 0, 450, 800);
+                ctx.globalAlpha = 1;
+            }
+
+            platforms.forEach(p => {
+                let img = p.color === 'green' ? imgPlatGreen : imgPlatBlue;
+                if (img.complete) ctx.drawImage(img, p.x, p.y, 65, 20);
+                else { ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 65, 20); }
+
+                if (p.item === 'coin' && imgCoin.complete) ctx.drawImage(imgCoin, p.x + 20, p.y - 30, 25, 25);
+                if (p.item === 'monster' && imgMonster.complete) ctx.drawImage(imgMonster, p.x + 10, p.y - 40, 45, 45);
+            });
+
+            if (rocketTime > 0 && imgRocket.complete) {
+                ctx.drawImage(imgRocket, player.x - 10, player.y - 10, 60, 80);
+            } else if (imgPlayer.complete) {
+                ctx.drawImage(imgPlayer, player.x, player.y, 40, 60);
+            } else {
+                ctx.fillStyle = 'yellow'; ctx.fillRect(player.x, player.y, 40, 60);
+            }
+
+            ctx.fillStyle = 'black';
+            ctx.font = 'bold 24px Arial';
+            ctx.fillText('Счет: ' + score, 20, 40);
+
+            if (isDead) {
+                ctx.fillStyle = 'rgba(0,0,0,0.8)';
+                ctx.fillRect(0, 0, 450, 800);
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 40px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Конец игры', 225, 350);
+                ctx.font = '24px Arial';
+                ctx.fillText('Счет: ' + score, 225, 400);
+                ctx.fillText('Нажми, чтобы выйти в меню', 225, 450);
+            }
+        }
+
+        function loop() {
+            if (!isDead) update();
+            draw();
+            gameLoopId = requestAnimationFrame(loop);
+        }
+
+        // Управление с клавиатуры
+        window.addEventListener('keydown', e => { 
+            if(keys && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
+                keys[e.code] = true;
+            }
+        });
+        window.addEventListener('keyup', e => { 
+            if(keys && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
+                keys[e.code] = false;
+            }
+        });
+
+        // Управление тапами для телефона
+        cvs.addEventListener('touchstart', e => {
+            if (isDead) { restart(); return; }
+            let touchX = e.touches[0].clientX;
+            let rect = cvs.getBoundingClientRect();
+            if (touchX - rect.left < rect.width / 2) keys['ArrowLeft'] = true;
+            else keys['ArrowRight'] = true;
+        });
+        
+        cvs.addEventListener('touchend', () => { 
+            if(keys) {
+                keys['ArrowLeft'] = false; 
+                keys['ArrowRight'] = false; 
+            }
+        });
+
+        cvs.addEventListener('click', () => { if (isDead) restart(); });
+
+        function restart() {
+            document.getElementById('menu').style.display = 'flex';
+            document.getElementById('game-container').style.display = 'none';
+            if (gameLoopId) cancelAnimationFrame(gameLoopId);
+        }
+    </script>
+</body>
+</html>
